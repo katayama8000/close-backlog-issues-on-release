@@ -1,6 +1,9 @@
 import { describe, it } from 'node:test';
 import { strict } from 'node:assert';
-import { extractPastaIssueKeys } from '../scripts/close-backlog-issues.js';
+import {
+  extractPastaIssueKeys,
+  extractVersion,
+} from '../scripts/close-backlog-issues.js';
 
 describe('extractPastaIssueKeys', () => {
   it('extracts WORKNULAB issue keys from release body', () => {
@@ -39,5 +42,19 @@ describe('extractPastaIssueKeys', () => {
   it('handles body with no issue keys', () => {
     const body = "## What's Changed\n* chore: update dependencies";
     strict.deepStrictEqual(extractPastaIssueKeys(body), []);
+  });
+});
+
+describe('extractVersion', () => {
+  it('extracts version from release title', () => {
+    strict.equal(extractVersion('app-1.86.5'), '1.86.5');
+  });
+
+  it('extracts version with v prefix', () => {
+    strict.equal(extractVersion('v2.0.0'), '2.0.0');
+  });
+
+  it('returns null when no version found', () => {
+    strict.equal(extractVersion('latest release'), null);
   });
 });

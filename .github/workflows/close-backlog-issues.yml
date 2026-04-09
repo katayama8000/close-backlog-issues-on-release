@@ -18,6 +18,7 @@ jobs:
 
       - name: Close Backlog issues
         env:
+          RELEASE_TITLE: ${{ github.event.release.name }}
           RELEASE_BODY: ${{ github.event.release.body }}
           BACKLOG_SPACE_NAME: ${{ secrets.BACKLOG_SPACE_NAME }}
           BACKLOG_API_KEY: ${{ secrets.BACKLOG_API_KEY }}

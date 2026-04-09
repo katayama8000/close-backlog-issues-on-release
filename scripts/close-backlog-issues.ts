@@ -10,11 +10,51 @@ type CloseResult =
   | { ok: true; issueKey: string }
   | { ok: false; issueKey: string; error: string };
 
+export function extractVersion(releaseTitle: string): string | null {
+  const match = releaseTitle.match(/\d+\.\d+\.\d+/);
+  return match ? match[0] : null;
+}
+
+async function addComment(
+  issueKey: string,
+  spaceName: string,
+  apiKey: string,
+  content: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const url = `https://${spaceName}.backlog.com/api/v2/issues/${issueKey}/comments?apiKey=${apiKey}`;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ content }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    return { ok: false, error: `${res.status}: ${text}` };
+  }
+
+  return { ok: true };
+}
+
 export async function closeBacklogIssue(
   issueKey: string,
   spaceName: string,
   apiKey: string,
+  version: string | null,
 ): Promise<CloseResult> {
+  if (version) {
+    const comment = await addComment(
+      issueKey,
+      spaceName,
+      apiKey,
+      `Released in ${version}`,
+    );
+    if (!comment.ok) {
+      return { ok: false, issueKey, error: `comment failed: ${comment.error}` };
+    }
+  }
+
   const url = `https://${spaceName}.backlog.com/api/v2/issues/${issueKey}?apiKey=${apiKey}`;
 
   const res = await fetch(url, {
@@ -33,8 +73,10 @@ export async function closeBacklogIssue(
 
 export async function main() {
   const releaseBody = process.env.RELEASE_BODY ?? '';
+  const releaseTitle = process.env.RELEASE_TITLE ?? '';
   const spaceName = process.env.BACKLOG_SPACE_NAME;
   const apiKey = process.env.BACKLOG_API_KEY;
+  const version = extractVersion(releaseTitle);
 
   if (!spaceName || !apiKey) {
     console.error('BACKLOG_SPACE_NAME and BACKLOG_API_KEY are required');
@@ -53,7 +95,7 @@ export async function main() {
   const results: CloseResult[] = [];
   for (const key of issueKeys) {
     console.log(`Closing ${key}...`);
-    const result = await closeBacklogIssue(key, spaceName, apiKey);
+    const result = await closeBacklogIssue(key, spaceName, apiKey, version);
     results.push(result);
   }
 
