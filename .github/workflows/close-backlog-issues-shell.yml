@@ -1,0 +1,67 @@
+# Automatically close Backlog issues when a GitHub Release is published.
+# Extracts WORKNULAB-XXXX issue keys from the release body,
+# adds a comment with the release version, and sets status to "Closed".
+
+name: Close Backlog Issues on Release (Shell)
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  close-issues:
+    runs-on: ubuntu-latest
+    env:
+      BACKLOG_SPACE_NAME: ${{ secrets.BACKLOG_SPACE_NAME }}
+      BACKLOG_API_KEY: ${{ secrets.BACKLOG_API_KEY }}
+    steps:
+      # Step 1: Parse the release to find issue keys and version number
+      - name: Extract issue keys and version
+        id: extract
+        env:
+          RELEASE_TITLE: ${{ github.event.release.name }}
+          RELEASE_BODY: ${{ github.event.release.body }}
+        run: |
+          # Extract WORKNULAB-XXXX keys from release body, deduplicate
+          KEYS=$(echo "$RELEASE_BODY" | grep -oE 'WORKNULAB-[0-9]+' | sort -u | tr '\n' ' ')
+          # Extract semver (e.g. 1.86.5) from release title (e.g. web-1.86.5)
+          VERSION=$(echo "$RELEASE_TITLE" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+          echo "keys=$KEYS" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Found issue keys: $KEYS"
+          echo "Version: $VERSION"
+
+      # Step 2: For each issue, add a release comment and close it
+      - name: Close issues
+        if: steps.extract.outputs.keys != ''
+        run: |
+          FAILED=0
+          for KEY in ${{ steps.extract.outputs.keys }}; do
+            echo "Closing $KEY..."
+
+            # Add a comment with the release version (skip if no version found)
+            VERSION="${{ steps.extract.outputs.version }}"
+            if [ -n "$VERSION" ]; then
+              COMMENT_RES=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+                "https://${BACKLOG_SPACE_NAME}.backlog.com/api/v2/issues/${KEY}/comments?apiKey=${BACKLOG_API_KEY}" \
+                -d "content=Released in ${VERSION}")
+              if [ "$COMMENT_RES" != "201" ]; then
+                echo "  FAILED: $KEY — comment returned $COMMENT_RES"
+                FAILED=1
+                continue
+              fi
+            fi
+
+            # Update issue status to "Closed" (statusId=4)
+            STATUS_RES=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH \
+              "https://${BACKLOG_SPACE_NAME}.backlog.com/api/v2/issues/${KEY}?apiKey=${BACKLOG_API_KEY}" \
+              -d "statusId=4")
+            if [ "$STATUS_RES" != "200" ]; then
+              echo "  FAILED: $KEY — status update returned $STATUS_RES"
+              FAILED=1
+            else
+              echo "  OK: $KEY"
+            fi
+          done
+          # Fail the workflow if any issue failed to close
+          if [ "$FAILED" -ne 0 ]; then exit 1; fi
