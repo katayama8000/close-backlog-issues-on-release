@@ -1,0 +1,12 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "npx tsx --test tests/close-backlog-issues.test.ts",
+    "close-backlog-issues": "npx tsx scripts/close-backlog-issues.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.2",
+    "tsx": "^4.21.0"
+  }
+}
