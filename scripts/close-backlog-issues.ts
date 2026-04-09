@@ -15,7 +15,7 @@ export async function closeBacklogIssue(
   spaceName: string,
   apiKey: string,
 ): Promise<CloseResult> {
-  const url = `https://${spaceName}.backlog.jp/api/v2/issues/${issueKey}?apiKey=${apiKey}`;
+  const url = `https://${spaceName}.backlog.com/api/v2/issues/${issueKey}?apiKey=${apiKey}`;
 
   const res = await fetch(url, {
     method: 'PATCH',
