@@ -1,21 +1,21 @@
 import { describe, it } from 'node:test';
 import { strict } from 'node:assert';
-import { extractPastaIssueKeys } from '../scripts/close-backlog-issues';
+import { extractPastaIssueKeys } from '../scripts/close-backlog-issues.js';
 
 describe('extractPastaIssueKeys', () => {
-  it('extracts MOUFU issue keys from release body', () => {
+  it('extracts WORKNULAB issue keys from release body', () => {
     const body = `
 ## What's Changed
-* MOUFU-1001 add user profile page by @user-a in #101
-* MOUFU-1002 fix login validation by @user-b in #102
+* WORKNULAB-1001 add user profile page by @user-a in #101
+* WORKNULAB-1002 fix login validation by @user-b in #102
 * OTHER-500 update CI config by @user-c in #103
-* MOUFU-1003 improve search performance by @user-d in #104
+* WORKNULAB-1003 improve search performance by @user-d in #104
 * MISC-200 bump dependencies by @user-e in #105
     `;
     strict.deepStrictEqual(extractPastaIssueKeys(body), [
-      'MOUFU-1001',
-      'MOUFU-1002',
-      'MOUFU-1003',
+      'WORKNULAB-1001',
+      'WORKNULAB-1002',
+      'WORKNULAB-1003',
     ]);
   });
 
@@ -24,16 +24,16 @@ describe('extractPastaIssueKeys', () => {
   });
 
   it('deduplicates issue keys', () => {
-    const body = 'MOUFU-1001 and again MOUFU-1001 and MOUFU-1002';
+    const body = 'WORKNULAB-1001 and again WORKNULAB-1001 and WORKNULAB-1002';
     strict.deepStrictEqual(extractPastaIssueKeys(body), [
-      'MOUFU-1001',
-      'MOUFU-1002',
+      'WORKNULAB-1001',
+      'WORKNULAB-1002',
     ]);
   });
 
-  it('ignores non-MOUFU keys', () => {
-    const body = 'OTHER-100 MOUFU-1001 MISC-200';
-    strict.deepStrictEqual(extractPastaIssueKeys(body), ['MOUFU-1001']);
+  it('ignores non-WORKNULAB keys', () => {
+    const body = 'OTHER-100 WORKNULAB-1001 MISC-200';
+    strict.deepStrictEqual(extractPastaIssueKeys(body), ['WORKNULAB-1001']);
   });
 
   it('handles body with no issue keys', () => {

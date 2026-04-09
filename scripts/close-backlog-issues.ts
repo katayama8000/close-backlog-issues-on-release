@@ -1,7 +1,7 @@
 const BACKLOG_STATUS_CLOSED = 4;
 
 export function extractPastaIssueKeys(body: string): string[] {
-  const matches = body.match(/MOUFU-\d+/g);
+  const matches = body.match(/WORKNULAB-\d+/g);
   if (!matches) return [];
   return [...new Set(matches)];
 }
@@ -44,7 +44,7 @@ export async function main() {
   const issueKeys = extractPastaIssueKeys(releaseBody);
 
   if (issueKeys.length === 0) {
-    console.log('No MOUFU issue keys found in release body.');
+    console.log('No WORKNULAB issue keys found in release body.');
     return;
   }
 
