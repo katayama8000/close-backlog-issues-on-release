@@ -20,43 +20,43 @@ jobs:
           RELEASE_TITLE: ${{ github.event.release.name }}
           RELEASE_BODY: ${{ github.event.release.body }}
         run: |
-          # Extract issue keys from release body
-          KEYS=$(echo "$RELEASE_BODY" | grep -oE 'WORKNULAB-[0-9]+' | sort -u | tr '\n' ' ')
+          # Extract issue keys and format as Markdown list
+          KEYS=$(echo "$RELEASE_BODY" | grep -oE 'WORKNULAB-[0-9]+' | sort -u | sed 's/^/- /')
 
-          # Determine parentId based on the release name prefix
-          if [[ "$RELEASE_TITLE" == api-* ]]; then
-            PARENT_ID="019d8acc7e9e7e6fbe0e9914be44b7a4"
-          elif [[ "$RELEASE_TITLE" == web-* ]]; then
-            PARENT_ID="019d8acc924f75e7bcfab014e9d355e4"
+          if [ -z "$KEYS" ]; then
+            KEYS="No related issues found."
           fi
 
-          echo "keys=$KEYS" >> "$GITHUB_OUTPUT"
+          # Set parentId based on prefix
+          if [[ "$RELEASE_TITLE" == api-* ]]; then
+            PARENT_ID="019d8ac2226b7932883dd6d69c00d571"
+          elif [[ "$RELEASE_TITLE" == web-* ]]; then
+            PARENT_ID="019d8ac20c73759d97ba44b7e6b3a09b"
+          fi
+
+          # Output to GITHUB_OUTPUT using heredoc for multiline strings
+          echo "keys<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$KEYS" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
           echo "title=$RELEASE_TITLE" >> "$GITHUB_OUTPUT"
           echo "parent_id=$PARENT_ID" >> "$GITHUB_OUTPUT"
 
       - name: Post to Backlog Document
         run: |
-          # Define document title and content (Markdown)
           DOC_TITLE="${{ steps.extract.outputs.title }}"
           PARENT_ID="${{ steps.extract.outputs.parent_id }}"
 
-          # Build document body using heredoc
+          # Build document body
           DOC_CONTENT=$(cat <<EOF
           # Release: ${{ steps.extract.outputs.title }}
 
           ## Related Issues
           ${{ steps.extract.outputs.keys }}
 
-          ## Release Notes
-          ${{ github.event.release.body }}
           EOF
           )
 
-          # API Request (POST /api/v2/documents)
-          # projectId: Numerical ID of the project
-          # title: Document title
-          # content: Document body (parsed as Markdown)
-          # parentId: The ID of the parent document/folder
+          # Execute API Request
           RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
             "https://${BACKLOG_SPACE_NAME}.backlog.com/api/v2/documents?apiKey=${BACKLOG_API_KEY}" \
             --data-urlencode "projectId=${BACKLOG_PROJECT_ID}" \
@@ -65,7 +65,6 @@ jobs:
             --data-urlencode "parentId=${PARENT_ID}" \
             --data-urlencode "emoji=🚀")
 
-          # Check if the document was created successfully (HTTP 201)
           if [ "$RESPONSE" != "201" ]; then
             echo "FAILED: Document creation returned status code $RESPONSE"
             exit 1
