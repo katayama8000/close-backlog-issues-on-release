@@ -29,9 +29,9 @@ jobs:
 
           # Set parentId based on prefix
           if [[ "$RELEASE_TITLE" == api-* ]]; then
-            PARENT_ID="019d8ac2226b7932883dd6d69c00d571"
+            PARENT_ID="019d8acc7e9e7e6fbe0e9914be44b7a4"
           elif [[ "$RELEASE_TITLE" == web-* ]]; then
-            PARENT_ID="019d8ac20c73759d97ba44b7e6b3a09b"
+            PARENT_ID="019d8acc924f75e7bcfab014e9d355e4"
           fi
 
           # Output to GITHUB_OUTPUT using heredoc for multiline strings
