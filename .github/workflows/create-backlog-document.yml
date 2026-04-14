@@ -6,13 +6,13 @@ on:
 
 jobs:
   create-document:
-    # Trigger only if release name starts with 'web-' or 'api-'
     if: startsWith(github.event.release.name, 'web-') || startsWith(github.event.release.name, 'api-')
     runs-on: ubuntu-latest
     env:
       BACKLOG_SPACE_NAME: ${{ secrets.BACKLOG_SPACE_NAME }}
       BACKLOG_API_KEY: ${{ secrets.BACKLOG_API_KEY }}
       BACKLOG_PROJECT_ID: ${{ secrets.BACKLOG_PROJECT_ID }}
+      TZ: 'Asia/Tokyo' # Set timezone to Japan
     steps:
       - name: Extract Release Info
         id: extract
@@ -20,38 +20,39 @@ jobs:
           RELEASE_TITLE: ${{ github.event.release.name }}
           RELEASE_BODY: ${{ github.event.release.body }}
         run: |
-          # Extract issue keys and format as Markdown list
+          # 1. Get current date in Japan (YYYY-MM-DD)
+          RELEASE_DATE=$(date +'%Y-%m-%d')
+
+          # 2. Extract issue keys and format as Markdown list
           KEYS=$(echo "$RELEASE_BODY" | grep -oE 'WORKNULAB-[0-9]+' | sort -u | sed 's/^/- /')
+          if [ -z "$KEYS" ]; then KEYS="No related issues found."; fi
 
-          if [ -z "$KEYS" ]; then
-            KEYS="No related issues found."
-          fi
-
-          # Set parentId based on prefix
+          # 3. Set parentId based on prefix
           if [[ "$RELEASE_TITLE" == api-* ]]; then
             PARENT_ID="019d8acc7e9e7e6fbe0e9914be44b7a4"
           elif [[ "$RELEASE_TITLE" == web-* ]]; then
             PARENT_ID="019d8acc924f75e7bcfab014e9d355e4"
           fi
 
-          # Output to GITHUB_OUTPUT using heredoc for multiline strings
-          echo "keys<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$KEYS" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
-          echo "title=$RELEASE_TITLE" >> "$GITHUB_OUTPUT"
-          echo "parent_id=$PARENT_ID" >> "$GITHUB_OUTPUT"
+          # Output to GITHUB_OUTPUT
+          {
+            echo "keys<<EOF"
+            echo "$KEYS"
+            echo "EOF"
+            echo "date=$RELEASE_DATE"
+            echo "title=$RELEASE_TITLE"
+            echo "parent_id=$PARENT_ID"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Post to Backlog Document
         run: |
           DOC_TITLE="${{ steps.extract.outputs.title }}"
           PARENT_ID="${{ steps.extract.outputs.parent_id }}"
-
           # Build document body
           DOC_CONTENT=$(cat <<EOF
-          # Release: ${{ steps.extract.outputs.title }}
-
           ## Related Issues
           ${{ steps.extract.outputs.keys }}
+          Date: ${{ steps.extract.outputs.date }} (JST)
 
           EOF
           )
