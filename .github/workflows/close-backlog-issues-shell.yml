@@ -5,8 +5,7 @@
 name: Close Backlog Issues on Release (Shell)
 
 on:
-  release:
-    types: [published]
+  workflow_dispatch:
 
 jobs:
   close-issues:

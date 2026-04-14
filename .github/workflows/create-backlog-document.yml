@@ -1,0 +1,74 @@
+name: Create Backlog Document on Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  create-document:
+    # Trigger only if release name starts with 'web-' or 'api-'
+    if: startsWith(github.event.release.name, 'web-') || startsWith(github.event.release.name, 'api-')
+    runs-on: ubuntu-latest
+    env:
+      BACKLOG_SPACE_NAME: ${{ secrets.BACKLOG_SPACE_NAME }}
+      BACKLOG_API_KEY: ${{ secrets.BACKLOG_API_KEY }}
+      BACKLOG_PROJECT_ID: ${{ secrets.BACKLOG_PROJECT_ID }}
+    steps:
+      - name: Extract Release Info
+        id: extract
+        env:
+          RELEASE_TITLE: ${{ github.event.release.name }}
+          RELEASE_BODY: ${{ github.event.release.body }}
+        run: |
+          # Extract issue keys from release body
+          KEYS=$(echo "$RELEASE_BODY" | grep -oE 'WORKNULAB-[0-9]+' | sort -u | tr '\n' ' ')
+
+          # Determine parentId based on the release name prefix
+          if [[ "$RELEASE_TITLE" == api-* ]]; then
+            PARENT_ID="019d8acc7e9e7e6fbe0e9914be44b7a4"
+          elif [[ "$RELEASE_TITLE" == web-* ]]; then
+            PARENT_ID="019d8acc924f75e7bcfab014e9d355e4"
+          fi
+
+          echo "keys=$KEYS" >> "$GITHUB_OUTPUT"
+          echo "title=$RELEASE_TITLE" >> "$GITHUB_OUTPUT"
+          echo "parent_id=$PARENT_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Post to Backlog Document
+        run: |
+          # Define document title and content (Markdown)
+          DOC_TITLE="${{ steps.extract.outputs.title }}"
+          PARENT_ID="${{ steps.extract.outputs.parent_id }}"
+
+          # Build document body using heredoc
+          DOC_CONTENT=$(cat <<EOF
+          # Release: ${{ steps.extract.outputs.title }}
+
+          ## Related Issues
+          ${{ steps.extract.outputs.keys }}
+
+          ## Release Notes
+          ${{ github.event.release.body }}
+          EOF
+          )
+
+          # API Request (POST /api/v2/documents)
+          # projectId: Numerical ID of the project
+          # title: Document title
+          # content: Document body (parsed as Markdown)
+          # parentId: The ID of the parent document/folder
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+            "https://${BACKLOG_SPACE_NAME}.backlog.com/api/v2/documents?apiKey=${BACKLOG_API_KEY}" \
+            --data-urlencode "projectId=${BACKLOG_PROJECT_ID}" \
+            --data-urlencode "title=${DOC_TITLE}" \
+            --data-urlencode "content=${DOC_CONTENT}" \
+            --data-urlencode "parentId=${PARENT_ID}" \
+            --data-urlencode "emoji=🚀")
+
+          # Check if the document was created successfully (HTTP 201)
+          if [ "$RESPONSE" != "201" ]; then
+            echo "FAILED: Document creation returned status code $RESPONSE"
+            exit 1
+          else
+            echo "SUCCESS: Document '${DOC_TITLE}' created under parent ID ${PARENT_ID}."
+          fi
