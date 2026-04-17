@@ -9,9 +9,10 @@ jobs:
     if: startsWith(github.event.release.name, 'web-') || startsWith(github.event.release.name, 'api-')
     runs-on: ubuntu-latest
     env:
-      BACKLOG_SPACE_NAME: ${{ secrets.BACKLOG_SPACE_NAME }}
+      BACKLOG_SPACE_NAME: ${{ vars.BACKLOG_SPACE_NAME }}
       BACKLOG_API_KEY: ${{ secrets.BACKLOG_API_KEY }}
-      BACKLOG_PROJECT_ID: ${{ secrets.BACKLOG_PROJECT_ID }}
+      BACKLOG_PROJECT_ID: ${{ vars.BACKLOG_PROJECT_ID }}
+      BACKLOG_NOTIFY_USER_IDS: ${{ vars.BACKLOG_NOTIFY_USER_IDS }}
       TZ: 'Asia/Tokyo' # Set timezone to Japan
     steps:
       - name: Extract Release Info
@@ -20,11 +21,13 @@ jobs:
           RELEASE_TITLE: ${{ github.event.release.name }}
           RELEASE_BODY: ${{ github.event.release.body }}
         run: |
+          set -euo pipefail
+
           # 1. Get current date in Japan (YYYY-MM-DD)
           RELEASE_DATE=$(date +'%Y-%m-%d')
 
           # 2. Extract issue keys and format as Markdown list
-          KEYS=$(echo "$RELEASE_BODY" | grep -oE 'WORKNULAB-[0-9]+' | sort -u | sed 's/^/- /')
+          KEYS=$(printf '%s\n' "$RELEASE_BODY" | grep -oE 'WORKNULAB-[0-9]+' | sort -u | sed 's/^/- /' || true)
           if [ -z "$KEYS" ]; then KEYS="No related issues found."; fi
 
           # 3. Set parentId based on prefix
@@ -39,8 +42,10 @@ jobs:
             echo "keys<<EOF"
             echo "$KEYS"
             echo "EOF"
+            echo "title<<EOF"
+            printf '%s\n' "$RELEASE_TITLE"
+            echo "EOF"
             echo "date=$RELEASE_DATE"
-            echo "title=$RELEASE_TITLE"
             echo "parent_id=$PARENT_ID"
           } >> "$GITHUB_OUTPUT"
 
@@ -72,3 +77,53 @@ jobs:
           else
             echo "SUCCESS: Document '${DOC_TITLE}' created under parent ID ${PARENT_ID}."
           fi
+
+      - name: Add Comment to Backlog Issues
+        env:
+          RELEASE_TITLE: ${{ github.event.release.name }}
+        run: |
+          set -euo pipefail
+
+          ISSUE_KEYS=$(printf '%s\n' "${{ steps.extract.outputs.keys }}" | grep -oE 'WORKNULAB-[0-9]+' || true)
+          if [ -z "$ISSUE_KEYS" ]; then
+            echo "No issue keys found. Skipping comments."
+            exit 0
+          fi
+
+          NOTIFY_IDS="$BACKLOG_NOTIFY_USER_IDS"
+
+          COMMENT="This issue is included in release ${RELEASE_TITLE}."
+
+          for KEY in $ISSUE_KEYS; do
+            echo "Adding comment to ${KEY}..."
+
+            CURL_ARGS=(
+              -s -o /dev/null -w "%{http_code}" -X POST
+              "https://${BACKLOG_SPACE_NAME}.backlog.com/api/v2/issues/${KEY}/comments?apiKey=${BACKLOG_API_KEY}"
+              --data-urlencode "content=${COMMENT}"
+            )
+
+            if [ -n "$NOTIFY_IDS" ]; then
+              IFS=',' read -r -a USER_IDS <<< "$NOTIFY_IDS"
+              for ID in "${USER_IDS[@]}"; do
+                TRIMMED_ID=$(printf '%s' "$ID" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+                if [[ "$TRIMMED_ID" =~ ^[0-9]+$ ]]; then
+                  CURL_ARGS+=(--data-urlencode "notifiedUserId[]=${TRIMMED_ID}")
+                elif [ -n "$TRIMMED_ID" ]; then
+                  echo "WARN: Skipping invalid notified user id: ${TRIMMED_ID}"
+                fi
+              done
+            fi
+
+            RESPONSE=$(curl "${CURL_ARGS[@]}")
+
+            if [ "$RESPONSE" != "201" ]; then
+              echo "FAILED: Comment on ${KEY} returned status code $RESPONSE"
+            else
+              if [ -n "$NOTIFY_IDS" ]; then
+                echo "SUCCESS: Comment added to ${KEY} with notifications (${NOTIFY_IDS})."
+              else
+                echo "SUCCESS: Comment added to ${KEY} without notifications."
+              fi
+            fi
+          done
